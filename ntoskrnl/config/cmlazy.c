@@ -145,7 +145,7 @@ CmpLazyFlushDpcRoutine(IN PKDPC Dpc,
 {
     /* Check if we should queue the lazy flush worker */
     DPRINT("Flush pending: %s, Holding lazy flush: %s.\n", CmpLazyFlushPending ? "yes" : "no", CmpHoldLazyFlush ? "yes" : "no");
-    if ((!CmpLazyFlushPending) && (!CmpHoldLazyFlush))
+    if (!CmpLazyFlushPending && !CmpHoldLazyFlush)
     {
         CmpLazyFlushPending = TRUE;
         ExQueueWorkItem(&CmpLazyWorkItem, DelayedWorkQueue);
@@ -160,7 +160,7 @@ CmpLazyFlush(VOID)
     PAGED_CODE();
 
     /* Check if we should set the lazy flush timer */
-    if ((!CmpNoWrite) && (!CmpHoldLazyFlush))
+    if (!CmpNoWrite && !CmpHoldLazyFlush)
     {
         /* Do it */
         DueTime.QuadPart = Int32x32To64(CmpLazyFlushIntervalInSeconds,
