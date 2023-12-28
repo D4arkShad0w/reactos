@@ -338,7 +338,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                                NULL);
 
     /* Check if we can create the hive */
-    if ((CreateAllowed) && !(CmpShareSystemHives))
+    if (CreateAllowed && !CmpShareSystemHives)
     {
         /* Open only or create */
         CreateDisposition = FILE_OPEN_IF;
@@ -357,7 +357,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
               (NoBuffering ? FILE_NO_INTERMEDIATE_BUFFERING : 0);
 
     /* Set share and access modes */
-    if ((CmpMiniNTBoot) && (CmpShareSystemHives))
+    if (CmpMiniNTBoot && CmpShareSystemHives)
     {
         /* We're on Live CD or otherwise sharing */
         DesiredAccess = FILE_READ_DATA;
@@ -568,7 +568,7 @@ CmpOpenHiveFiles(IN PCUNICODE_STRING BaseName,
                           FILE_SYNCHRONOUS_IO_NONALERT | IoFlags,
                           NULL,
                           0);
-    if ((NT_SUCCESS(Status)) && (MarkAsSystemHive))
+    if (NT_SUCCESS(Status) && MarkAsSystemHive)
     {
         /* We opened it, mark it as a system hive */
         Status = ZwFsControlFile(*Log,

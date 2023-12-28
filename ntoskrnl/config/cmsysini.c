@@ -24,7 +24,11 @@ PEPROCESS CmpSystemProcess;
 PVOID CmpRegistryLockCallerCaller, CmpRegistryLockCaller;
 BOOLEAN CmpFlushOnLockRelease;
 BOOLEAN CmpSpecialBootCondition;
-BOOLEAN CmpNoWrite;
+
+/* Do not allow registry hive writes, until the IO subsystem is initialized
+ * and disk access is enabled (when the SM signals so after AUTOCHK) */
+BOOLEAN CmpNoWrite = TRUE;
+
 BOOLEAN CmpWasSetupBoot;
 BOOLEAN CmpProfileLoaded;
 BOOLEAN CmpNoVolatileCreates;
@@ -328,7 +332,7 @@ CmpInitHiveFromFile(IN PCUNICODE_STRING HiveName,
         *New = FALSE;
     }
 
-    /* Check if we're sharing hives */
+    /* Check if the system hives are opened in shared mode */
     if (CmpShareSystemHives)
     {
         /* Then force using the primary hive */
@@ -924,11 +928,9 @@ CmpInitializeSystemHive(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     if (!RtlCreateUnicodeString(&SystemHive->FileFullPath, L"\\SystemRoot\\System32\\Config\\SYSTEM"))
         return FALSE;
 
-    /* Manually set the hive as volatile, if in Live CD mode */
+    /* Load the system hive as volatile, if opened in shared mode */
     if (HiveBase && CmpShareSystemHives)
-    {
         SystemHive->Hive.HiveFlags = HIVE_VOLATILE;
-    }
 
     /* Save the boot type */
     CmpBootType = SystemHive->Hive.BaseBlock->BootType;
@@ -1319,8 +1321,8 @@ CmpLoadHiveThread(IN PVOID StartContext)
                                      &CmHive,
                                      &CmpMachineHiveList[i].Allocate,
                                      CM_CHECK_REGISTRY_PURGE_VOLATILES);
-        if (!(NT_SUCCESS(Status)) ||
-            (!(CmpShareSystemHives) && !(CmHive->FileHandles[HFILE_TYPE_LOG])))
+        if (!NT_SUCCESS(Status) ||
+            (!CmpShareSystemHives && !CmHive->FileHandles[HFILE_TYPE_LOG]))
         {
             /*
              * We failed, or could not get a log file (unless
@@ -1469,9 +1471,10 @@ CmpInitializeHiveList(VOID)
     ULONG i;
     USHORT RegStart;
     PSECURITY_DESCRIPTOR SecurityDescriptor;
+
     PAGED_CODE();
 
-    /* Allow writing for now */
+    /* Allow writing to hives now */
     CmpNoWrite = FALSE;
 
     /* Build the file name and registry name strings */
@@ -1503,7 +1506,7 @@ CmpInitializeHiveList(VOID)
         /* Make sure the list is set up */
         ASSERT(CmpMachineHiveList[i].Name != NULL);
 
-        /* Load the hive as volatile, if in LiveCD mode */
+        /* Load this root hive as volatile, if opened in shared mode */
         if (CmpShareSystemHives)
             CmpMachineHiveList[i].HHiveFlags |= HIVE_VOLATILE;
 
@@ -1625,7 +1628,7 @@ CmInitSystem1(VOID)
     /* Check if this is PE-boot */
     if (InitIsWinPEMode)
     {
-        /* Set registry to PE mode */
+        /* Set registry in PE mode and load the system hives in shared mode */
         CmpMiniNTBoot = TRUE;
         CmpShareSystemHives = TRUE;
     }

@@ -21,11 +21,7 @@ IoSetThreadHardErrorMode(
     _In_ BOOLEAN HardErrorEnabled);
 #endif
 
-/* GLOBALS *****************************************************************/
-
-#if !defined(CMLIB_HOST) && !defined(_BLDR_)
-extern BOOLEAN CmpMiniNTBoot;
-#endif
+/* GLOBALS ******************************************************************/
 
 /* PRIVATE FUNCTIONS ********************************************************/
 
@@ -101,7 +97,7 @@ HvpWriteLog(
      * The hive log we are going to write data into
      * has to be writable and with a sane storage.
      */
-    ASSERT(RegistryHive->ReadOnly == FALSE);
+    ASSERT(!RegistryHive->ReadOnly);
     ASSERT(RegistryHive->BaseBlock->Length ==
            RegistryHive->Storage[Stable].Length * HBLOCK_SIZE);
 
@@ -324,7 +320,7 @@ HvpWriteHive(
     ULONG LastIndex;
     PVOID Block;
 
-    ASSERT(RegistryHive->ReadOnly == FALSE);
+    ASSERT(!RegistryHive->ReadOnly);
     ASSERT(RegistryHive->BaseBlock->Length ==
            RegistryHive->Storage[Stable].Length * HBLOCK_SIZE);
     ASSERT(RegistryHive->BaseBlock->RootCell != HCELL_NIL);
@@ -476,8 +472,15 @@ HvSyncHive(
     BOOLEAN HardErrors;
 #endif
 
-    ASSERT(RegistryHive->ReadOnly == FALSE);
+    ASSERT(!RegistryHive->ReadOnly);
     ASSERT(RegistryHive->Signature == HV_HHIVE_SIGNATURE);
+
+    /* Avoid any writing operations on volatile hives */
+    if (RegistryHive->HiveFlags & HIVE_VOLATILE)
+    {
+        DPRINT("Hive 0x%p is volatile\n", RegistryHive);
+        return TRUE;
+    }
 
     /*
      * Check if there's any dirty data in the vector.
@@ -492,26 +495,6 @@ HvSyncHive(
         return TRUE;
     }
 
-    /*
-     * We are either in Live CD or we are sharing hives.
-     * In either of the cases, hives can only be read
-     * so don't do any writing operations on them.
-     */
-#if !defined(CMLIB_HOST) && !defined(_BLDR_)
-    if (CmpMiniNTBoot)
-    {
-        DPRINT("We are sharing hives or in Live CD mode, abort syncing\n");
-        return TRUE;
-    }
-#endif
-
-    /* Avoid any writing operations on volatile hives */
-    if (RegistryHive->HiveFlags & HIVE_VOLATILE)
-    {
-        DPRINT("The hive is volatile (hive 0x%p)\n", RegistryHive);
-        return TRUE;
-    }
-
 #if !defined(CMLIB_HOST) && !defined(_BLDR_)
     /* Disable hard errors before syncing the hive */
     HardErrors = IoSetThreadHardErrorMode(FALSE);
@@ -522,8 +505,8 @@ HvSyncHive(
     KeQuerySystemTime(&RegistryHive->BaseBlock->TimeStamp);
 #endif
 
-    /* Update the log file of hive if present */
-    if (RegistryHive->Log == TRUE)
+    /* Update the hive log file if present */
+    if (RegistryHive->Log)
     {
         if (!HvpWriteLog(RegistryHive))
         {
@@ -546,7 +529,7 @@ HvSyncHive(
     }
 
     /* Update the alternate hive file if present */
-    if (RegistryHive->Alternate == TRUE)
+    if (RegistryHive->Alternate)
     {
         if (!HvpWriteHive(RegistryHive, TRUE, HFILE_TYPE_ALTERNATE))
         {
@@ -615,7 +598,7 @@ CMAPI
 HvWriteHive(
     _In_ PHHIVE RegistryHive)
 {
-    ASSERT(RegistryHive->ReadOnly == FALSE);
+    ASSERT(!RegistryHive->ReadOnly);
     ASSERT(RegistryHive->Signature == HV_HHIVE_SIGNATURE);
 
 #if !defined(_BLDR_)
@@ -653,9 +636,9 @@ CMAPI
 HvWriteAlternateHive(
     _In_ PHHIVE RegistryHive)
 {
-    ASSERT(RegistryHive->ReadOnly == FALSE);
+    ASSERT(!RegistryHive->ReadOnly);
     ASSERT(RegistryHive->Signature == HV_HHIVE_SIGNATURE);
-    ASSERT(RegistryHive->Alternate == TRUE);
+    ASSERT(RegistryHive->Alternate);
 
 #if !defined(_BLDR_)
     /* Update hive header modification time */
@@ -691,7 +674,7 @@ CMAPI
 HvSyncHiveFromRecover(
     _In_ PHHIVE RegistryHive)
 {
-    ASSERT(RegistryHive->ReadOnly == FALSE);
+    ASSERT(!RegistryHive->ReadOnly);
     ASSERT(RegistryHive->Signature == HV_HHIVE_SIGNATURE);
 
     /* Call the private API call to do the deed for us */
